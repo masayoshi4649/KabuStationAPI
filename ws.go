@@ -1,13 +1,17 @@
 package kabusapi
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"log"
+	"net"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 const endpoint = "ws://localhost:18080/kabusapi/websocket"
@@ -129,50 +133,94 @@ type Quote struct {
 	VWAP              float64   `json:"VWAP"`
 }
 
-// OpenQuote は endpoint に接続して Quote を受け取り、handlers に流します。
-// 戻り値は (closeFunc, error)。closeFunc を呼ぶと接続を閉じます。
-func OpenQuote(handlers ...func(Quote)) (func(), error) {
+// Handler は既存の定義と合わせる
+type Handler func(Quote)
+
+// OpenQuote はライブラリ向けの簡単起動関数。
+// 呼ぶとバックグラウンドで接続・受信を始め、受信した Quote を handlers に渡す。
+// 戻り値の closeFunc を呼ぶと接続を閉じて受信ループを止める。
+// 初回接続に失敗した場合はエラーを返す。
+func OpenQuote(handlers ...func(Quote)) (closeFunc func(), err error) {
+	// endpoint と Quote 型は ws.go に定義されている想定（参照: ws.go） :contentReference[oaicite:2]{index=2}
 	if endpoint == "" {
-		return nil, errors.New("kabusapi: endpoint is empty")
+		return nil, errors.New("OpenQuote: endpoint is empty")
 	}
 
-	dialer := websocket.DefaultDialer
-	conn, _, dErr := dialer.Dial(endpoint, nil)
+	// API キーは auth.go の SetAPIKey / APIKey を使って設定されている前提（参照: auth.go） :contentReference[oaicite:3]{index=3}
+	key := APIKey()
+	if key == "" {
+		return nil, errors.New("OpenQuote: API key is empty; call SetAPIKey(...) before OpenQuote")
+	}
+
+	// 管理用 context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 初回ダイヤル（短時間タイムアウト）
+	dialCtx, dialCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer dialCancel()
+
+	conn, _, dErr := websocket.Dial(dialCtx, endpoint, &websocket.DialOptions{
+		HTTPHeader: map[string][]string{
+			"X-API-KEY": {key},
+		},
+	})
 	if dErr != nil {
+		cancel()
 		return nil, dErr
 	}
 
-	done := make(chan struct{})
+	var wg sync.WaitGroup
 	var once sync.Once
+	var closing uint32 // 0 == running, 1 == closing initiated
 
-	// safe wrapper: handler 内の panic を吸収
+	// safeCall: handler 内の panic を吸収する
 	safeCall := func(h func(Quote), q Quote) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("kabusapi: handler panic recovered: %v", r)
+				log.Printf("kabusapi: OpenQuote handler panic recovered: %v", r)
 			}
 		}()
 		h(q)
 	}
 
-	// 読み取りループ
+	// read loop
+	wg.Add(1)
 	go func() {
-		// ここで組み込み close(done) を呼ぶ -> done チャネルを閉じる
-		defer close(done)
+		defer wg.Done()
+		// 終了時は必ずコネクションをノーマルで閉じる（WriteControl は nhooyr が管理するため Close で十分）
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 		for {
-			_, msg, rErr := conn.ReadMessage()
-			if rErr != nil {
-				log.Printf("kabusapi: websocket read error: %v", rErr)
+			var q Quote
+			if rErr := wsjson.Read(ctx, conn, &q); rErr != nil {
+				// 呼び出し元がキャンセルした（close() が呼ばれた等）
+				if errors.Is(rErr, context.Canceled) || errors.Is(rErr, context.DeadlineExceeded) {
+					return
+				}
+
+				// WebSocket 側の正常クローズ判定
+				if s := websocket.CloseStatus(rErr); s == websocket.StatusNormalClosure ||
+					s == websocket.StatusGoingAway || s == websocket.StatusNoStatusRcvd {
+					return
+				}
+
+				// ネットワークが既に閉じられている（race 発生時のノイズ）
+				if errors.Is(rErr, net.ErrClosed) || strings.Contains(rErr.Error(), "use of closed network connection") {
+					// client 側で close() を発火して race したなら静かに抜ける
+					if atomic.LoadUint32(&closing) == 1 {
+						return
+					}
+					// そうでなければログに残して終了（必要なら自動再接続を追加）
+					log.Printf("kabusapi: websocket read network closed: %v", rErr)
+					return
+				}
+
+				// その他のエラーはログを出して終了（再接続ポリシーを入れるならここを拡張）
+				log.Printf("kabusapi: websocket read error: %T %v", rErr, rErr)
 				return
 			}
 
-			var q Quote
-			if jErr := json.Unmarshal(msg, &q); jErr != nil {
-				log.Printf("kabusapi: json unmarshal error: %v; raw: %s", jErr, string(msg))
-				continue
-			}
-
+			// ハンドラを実行（各ハンドラは個別 goroutine で非ブロッキングに）
 			for _, h := range handlers {
 				if h == nil {
 					continue
@@ -182,15 +230,26 @@ func OpenQuote(handlers ...func(Quote)) (func(), error) {
 		}
 	}()
 
-	// closeFn: 何度呼んでも安全
+	// closeFunc を返す（安全に複数回呼べる）
 	closeFn := func() {
 		once.Do(func() {
-			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(1*time.Second))
-			_ = conn.Close()
-			// 読み取り goroutine が done を閉じるのを待つ
+			atomic.StoreUint32(&closing, 1)
+			// goroutine 停止を促す
+			cancel()
+			// conn.Close して Read をアンロックする
+			_ = conn.Close(websocket.StatusNormalClosure, "client close")
+
+			// goroutine の終了を待つ
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
 			select {
 			case <-done:
-			case <-time.After(2 * time.Second):
+				// 正常終了
+			case <-time.After(3 * time.Second):
+				log.Println("kabusapi: OpenQuote close timeout waiting for goroutine")
 			}
 		})
 	}
