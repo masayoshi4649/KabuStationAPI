@@ -151,7 +151,7 @@ type ReqPutRegisterUnregisterAll struct {
 // 銘柄登録全解除
 type ResPutRegisterUnregisterAll struct {
 	// 現在登録されている銘柄のリスト<br>※銘柄登録解除が正常に行われれば、空リストを返します。<br> 登録解除でエラー等が発生した場合、現在登録されている銘柄のリストを返します
-	RegistList map[string]interface{} `json:"RegistList,omitempty"`
+	RegistList []interface{}
 }
 
 // PutRegisterUnregisterAll は **PUT /unregister/all** を呼び出します。
