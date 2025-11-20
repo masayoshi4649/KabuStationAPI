@@ -543,7 +543,7 @@ type ReqGetInfoSymbolnameFuture struct {
 	// 先物コード<br> ※大文字小文字は区別しません。 <table> <thead> <tr> <th>定義値</th> <th>説明</th> </tr> </thead> <tbody> <tr> <td>NK225</td> <td>日経平均先物</td> </tr> <tr> <td>NK225mini</td> <td>日経225mini先物</td> </tr> <tr> <td>TOPIX</td> <td>TOPIX先物</td> </tr> <tr> <td>TOPIXmini</td> <td>ミニTOPIX先物</td> </tr> <tr> <td>GROWTH</td> <td>グロース250先物</td> </tr> <tr> <td>JPX400</td> <td>JPX日経400先物</td> </tr> <tr> <td>DOW</td> <td>NYダウ先物</td> </tr> <tr> <td>VI</td> <td>日経平均VI先物</td> </tr> <tr> <td>Core30</td> <td>TOPIX Core30先物</td> </tr> <tr> <td>REIT</td> <td>東証REIT指数先物</td> </tr> <tr> <td>NK225micro</td> <td>日経225マイクロ先物</td> </tr> </tbody> </table>
 	FutureCode string `json:"-" query:"FutureCode"`
 	// 限月<br> ※限月はyyyyMM形式で指定します。0を指定した場合、直近限月となります。<br> ※取引最終日に「0」（直近限月）を指定した場合、日中・夜間の時間帯に関わらず、 取引最終日を迎える限月の銘柄コードを返します。取引最終日を迎える銘柄の取引は日中取引をもって終了となりますので、ご注意ください。<br>
-	DerivMonth int `json:"-" query:"DerivMonth" required:"true"`
+	DerivMonth string `json:"-" query:"DerivMonth" required:"true"`
 }
 
 // ResGetInfoSymbolnameFuture は **GET /symbolname/future** のレスポンス。
@@ -610,7 +610,7 @@ type ReqGetInfoSymbolnameOption struct {
 	// オプションコード<br> ※指定なしの場合は、日経225オプションを対象とする。<br> <table> <thead> <tr> <th>定義値</th> <th>説明</th> </tr> </thead> <tbody> <tr> <td>NK225op</td> <td>日経225オプション</td> </tr> <tr> <td>NK225miniop</td> <td>日経225ミニオプション</td> </tr> </tbody> </table>
 	OptionCode string `json:"-" query:"OptionCode"`
 	// 限月<br>※限月はyyyyMM形式で指定します。0を指定した場合、直近限月となります。<br>※取引最終日に「0」（直近限月）を指定した場合、日中・夜間の時間帯に関わらず、取引最終日を迎える限月の銘柄コードを返します。取引最終日を迎える銘柄の取引は日中取引をもって終了となりますので、ご注意ください。
-	DerivMonth int `json:"-" query:"DerivMonth" required:"true"`
+	DerivMonth string `json:"-" query:"DerivMonth" required:"true"`
 	// コール or プット<br> ※大文字小文字は区別しません。 <table> <thead> <tr> <th>定義値</th> <th>説明</th> </tr> </thead> <tbody> <tr> <td>P</td> <td>PUT</td> </tr> <tr> <td>C</td> <td>CALL</td> </tr> </tbody> </table>
 	PutOrCall string `json:"-" query:"PutOrCall" required:"true"`
 	// 権利行使価格<br>※0を指定した場合、APIを実行した時点でのATMとなります。
@@ -685,7 +685,7 @@ func GetInfoSymbolnameOption(req ReqGetInfoSymbolnameOption) (code int, res ResG
 // - 認証: 必須（X-API-KEY ヘッダー）
 type ReqGetInfoSymbolnameMinioptionweekly struct {
 	// 限月<br>※限月はyyyyMM形式で指定します。0を指定した場合、直近限月となります。<br>※取引最終日に「0」（直近限月）を指定した場合、日中・夜間の時間帯に関わらず、取引最終日を迎える限月の銘柄コードを返します。取引最終日を迎える銘柄の取引は日中取引をもって終了となりますので、ご注意ください。
-	DerivMonth int `json:"-" query:"DerivMonth" required:"true"`
+	DerivMonth string `json:"-" query:"DerivMonth" required:"true"`
 	// 限週<br>※限週は0,1,3,4,5のいずれかを指定します。0を指定した場合、指定した限月の直近限週となります。<br>※取引最終日に「0」（直近限週）を指定した場合、日中・夜間の時間帯に関わらず、取引最終日を迎える限週の銘柄コードを返します。取引最終日を迎える銘柄の取引は日中取引をもって終了となりますので、ご注意ください。
 	DerivWeekly int `json:"-" query:"DerivWeekly" required:"true"`
 	// コール or プット<br> ※大文字小文字は区別しません。 <table> <thead> <tr> <th>定義値</th> <th>説明</th> </tr> </thead> <tbody> <tr> <td>P</td> <td>PUT</td> </tr> <tr> <td>C</td> <td>CALL</td> </tr> </tbody> </table>
