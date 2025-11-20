@@ -573,12 +573,9 @@ func GetInfoSymbolnameFuture(req ReqGetInfoSymbolnameFuture) (code int, res ResG
 	p := "/symbolname/future"
 	// クエリパラメータの構築（zero値は送信しません）
 	v := url.Values{}
-	if req.FutureCode != "" {
-		v.Set("FutureCode", fmt.Sprint(req.FutureCode))
-	}
-	if req.DerivMonth != 0 {
-		v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
-	}
+	v.Set("FutureCode", fmt.Sprint(req.FutureCode))
+	v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
+
 	var b []byte // ボディなし
 	needAuth := true
 	code, data, err := doRequest("GET", p, v, b, needAuth)
@@ -647,9 +644,7 @@ func GetInfoSymbolnameOption(req ReqGetInfoSymbolnameOption) (code int, res ResG
 	if req.OptionCode != "" {
 		v.Set("OptionCode", fmt.Sprint(req.OptionCode))
 	}
-	if req.DerivMonth != 0 {
-		v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
-	}
+	v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
 	if req.PutOrCall != "" {
 		v.Set("PutOrCall", fmt.Sprint(req.PutOrCall))
 	}
@@ -721,9 +716,7 @@ func GetInfoSymbolnameMinioptionweekly(req ReqGetInfoSymbolnameMinioptionweekly)
 	p := "/symbolname/minioptionweekly"
 	// クエリパラメータの構築（zero値は送信しません）
 	v := url.Values{}
-	if req.DerivMonth != 0 {
-		v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
-	}
+	v.Set("DerivMonth", fmt.Sprint(req.DerivMonth))
 	if req.DerivWeekly != 0 {
 		v.Set("DerivWeekly", fmt.Sprint(req.DerivWeekly))
 	}
